@@ -4,7 +4,7 @@ import json
 import os
 
 SISS_URL = "https://www.siss.gob.cl/586/w3-propertyvalue-6385.html"
-OUTPUT_FILE = "json/tarifas_siss_pdfs.json"
+OUTPUT_FILE = "json/tariff_siss_pdfs.json"
 
 def fetch_tarifas_links():
     response = requests.get(SISS_URL)
