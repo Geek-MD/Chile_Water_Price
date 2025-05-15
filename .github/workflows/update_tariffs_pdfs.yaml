@@ -22,7 +22,7 @@ jobs:
         run: pip install beautifulsoup4 requests
 
       - name: Fetch SISS PDF Links
-        run: python scripts/fetch_tarifas_pdfs.py
+        run: python scripts/fetch_tariffs_pdfs.py
 
       - name: Commit changes if any
         run: |
