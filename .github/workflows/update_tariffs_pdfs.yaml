@@ -1,0 +1,33 @@
+name: Update SISS PDF Links
+
+on:
+  schedule:
+    - cron: "0 3 * * 1"  # Todos los lunes a las 03:00 UTC
+  workflow_dispatch:  # Permite ejecutar manualmente
+
+jobs:
+  update_tarifas_pdfs:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Install dependencies
+        run: pip install beautifulsoup4 requests
+
+      - name: Fetch SISS PDF Links
+        run: python scripts/fetch_tarifas_pdfs.py
+
+      - name: Commit changes if any
+        run: |
+          git config --local user.name "GitHub Actions"
+          git config --local user.email "actions@github.com"
+          git add json/tarifas_siss_pdfs.json
+          git diff --cached --quiet || git commit -m "Update SISS PDF links"
+          git push
