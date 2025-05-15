@@ -4,8 +4,8 @@ import requests
 import fitz  # PyMuPDF
 
 PDFS_DIR = "pdfs"
-JSON_FILE = "json/tarifas_siss_pdfs.json"
-OUTPUT_FILE = "json/tarifas_siss_data.json"
+JSON_FILE = "json/tariff_siss_pdfs.json"
+OUTPUT_FILE = "json/tariff_siss_data.json"
 
 def download_pdf(url, path):
     if not os.path.exists(path):
