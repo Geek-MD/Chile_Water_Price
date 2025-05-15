@@ -1,33 +1,18 @@
-import requests
-from bs4 import BeautifulSoup
 import json
 import os
-import time
+from bs4 import BeautifulSoup
 
-SISS_URL = "https://www.siss.gob.cl/586/w3-propertyvalue-6385.html"
+SOURCE_FILE = "html/tariff_siss_source.html"
 OUTPUT_FILE = "json/tariff_siss_pdfs.json"
 
 def fetch_tarifas_links():
-    retries = 3
-    backoff = 5  # segundos
+    if not os.path.exists(SOURCE_FILE):
+        raise FileNotFoundError(f"El archivo {SOURCE_FILE} no existe. Ejecuta primero download_siss_source.py")
 
-    for attempt in range(1, retries + 1):
-        try:
-            print(f"Intento {attempt} de {retries}: solicitando {SISS_URL}")
-            response = requests.get(SISS_URL, timeout=15)
-            response.raise_for_status()
-            break  # Éxito
-        except (requests.exceptions.ConnectTimeout, requests.exceptions.ReadTimeout):
-            print(f"Timeout al conectar con SISS en intento {attempt}. Retrying in {backoff} seconds...")
-            time.sleep(backoff)
-        except requests.exceptions.RequestException as e:
-            print(f"Error al conectar con SISS: {e}")
-            raise SystemExit(1)
-    else:
-        print("No se pudo conectar con SISS después de varios intentos.")
-        raise SystemExit(1)
+    with open(SOURCE_FILE, "rb") as f:
+        content = f.read()
 
-    soup = BeautifulSoup(response.content, "html.parser")
+    soup = BeautifulSoup(content, "html.parser")
 
     data = {}
 
@@ -55,7 +40,7 @@ def fetch_tarifas_links():
 
                 link = tarifa_vigente_cell.find("a", href=True)
                 if link and link["href"].lower().endswith(".pdf"):
-                    pdf_url = requests.compat.urljoin(SISS_URL, link["href"])
+                    pdf_url = link["href"]
 
                     data[current_region][current_empresa][localidad] = {
                         "tarifa_vigente_pdf": pdf_url
