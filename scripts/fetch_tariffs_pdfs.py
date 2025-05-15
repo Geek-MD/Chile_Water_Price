@@ -2,13 +2,30 @@ import requests
 from bs4 import BeautifulSoup
 import json
 import os
+import time
 
 SISS_URL = "https://www.siss.gob.cl/586/w3-propertyvalue-6385.html"
 OUTPUT_FILE = "json/tariff_siss_pdfs.json"
 
 def fetch_tarifas_links():
-    response = requests.get(SISS_URL)
-    response.raise_for_status()
+    retries = 3
+    backoff = 5  # segundos
+
+    for attempt in range(1, retries + 1):
+        try:
+            print(f"Intento {attempt} de {retries}: solicitando {SISS_URL}")
+            response = requests.get(SISS_URL, timeout=15)
+            response.raise_for_status()
+            break  # Éxito
+        except (requests.exceptions.ConnectTimeout, requests.exceptions.ReadTimeout):
+            print(f"Timeout al conectar con SISS en intento {attempt}. Retrying in {backoff} seconds...")
+            time.sleep(backoff)
+        except requests.exceptions.RequestException as e:
+            print(f"Error al conectar con SISS: {e}")
+            raise SystemExit(1)
+    else:
+        print("No se pudo conectar con SISS después de varios intentos.")
+        raise SystemExit(1)
 
     soup = BeautifulSoup(response.content, "html.parser")
 
@@ -26,7 +43,7 @@ def fetch_tarifas_links():
             if current_region:
                 data[current_region].setdefault(current_empresa, {})
         elif element.name == "table" and current_region and current_empresa:
-            rows = element.find_all("tr")[1:]  # Saltar encabezado
+            rows = element.find_all("tr")[1:]
 
             for row in rows:
                 cols = row.find_all("td")
