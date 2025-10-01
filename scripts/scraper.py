@@ -1,126 +1,106 @@
 import os
-import sys
-import requests
 import hashlib
-import json
+import requests
 from bs4 import BeautifulSoup
+from datetime import datetime
 from urllib.parse import urljoin
+from requests.adapters import HTTPAdapter, Retry
 
-# Configuración
-BASE_URL = "https://www.siss.gob.cl"
+# URL objetivo y archivos auxiliares
 TARGET_URL = "https://www.siss.gob.cl/589/w3-propertyvalue-9034.html"
-DIV_ID = "SISS23_pa_tarifas_vigentes"
-PDF_DIR = "pdf"
-DATA_DIR = "data"
-LAST_MODIFIED_FILE = "last_modified.txt"
-HASH_FILE = "page_hash.txt"
-OUTPUT_JSON = os.path.join(DATA_DIR, "pdfs.json")
+LAST_HASH_FILE = "scripts/last_page_hash.txt"
+PDF_DIR = "pdfs"
 
-# Asegurar directorios
-os.makedirs(PDF_DIR, exist_ok=True)
-os.makedirs(DATA_DIR, exist_ok=True)
+# User-Agent personalizado para evitar bloqueos por scraping
+HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/116.0.0.0 Safari/537.36"
+    )
+}
 
-def get_last_modified():
-    """Obtiene la cabecera Last-Modified del recurso si existe"""
+# Sesión con retry y backoff
+session = requests.Session()
+retries = Retry(
+    total=5,
+    backoff_factor=2,
+    status_forcelist=[429, 500, 502, 503, 504],
+)
+session.mount("http://", HTTPAdapter(max_retries=retries))
+session.mount("https://", HTTPAdapter(max_retries=retries))
+
+def get_last_modified_header():
     try:
-        response = requests.head(TARGET_URL, timeout=30, allow_redirects=True)
-        return response.headers.get("Last-Modified")
+        response = session.head(TARGET_URL, timeout=30, headers=HEADERS, allow_redirects=True)
+        last_modified = response.headers.get("Last-Modified")
+        if last_modified:
+            print(f"📅 Última modificación reportada por el servidor: {last_modified}")
+        else:
+            print("⚠️ No se encontró cabecera Last-Modified en la respuesta HTTP.")
     except requests.RequestException as e:
         print(f"⚠️ Error obteniendo encabezado Last-Modified: {e}")
-        return None
 
-def load_file(filepath):
-    return open(filepath, "r").read().strip() if os.path.exists(filepath) else None
+def calculate_page_hash(html_content):
+    return hashlib.sha256(html_content.encode("utf-8")).hexdigest()
 
-def save_file(filepath, content):
-    with open(filepath, "w", encoding="utf-8") as f:
-        f.write(content)
+def load_last_hash():
+    if os.path.exists(LAST_HASH_FILE):
+        with open(LAST_HASH_FILE, "r") as f:
+            return f.read().strip()
+    return None
 
-def hash_div_content(html):
-    soup = BeautifulSoup(html, "html.parser")
-    div = soup.find("div", {"id": DIV_ID})
-    return hashlib.sha256(div.encode("utf-8")).hexdigest() if div else None
+def save_current_hash(page_hash):
+    os.makedirs(os.path.dirname(LAST_HASH_FILE), exist_ok=True)
+    with open(LAST_HASH_FILE, "w") as f:
+        f.write(page_hash)
 
-def normalize_text(text):
-    return text.replace('\xa0', ' ').strip()
+def download_pdfs(soup):
+    os.makedirs(PDF_DIR, exist_ok=True)
+    count = 0
+    for link in soup.find_all("a", href=True):
+        href = link["href"]
+        if href.endswith(".pdf"):
+            pdf_url = urljoin(TARGET_URL, href)
+            pdf_filename = pdf_url.split("/")[-1]
+            pdf_path = os.path.join(PDF_DIR, pdf_filename)
 
-def get_pdf_links(html):
-    soup = BeautifulSoup(html, "html.parser")
-    data = []
-    h3_blocks = soup.find_all("h3", class_="titulo")
+            if os.path.exists(pdf_path):
+                continue  # Skip already downloaded
 
-    for h3 in h3_blocks:
-        empresa = normalize_text(h3.text.split(" - ")[0])
-        table = h3.find_next("table")
-        if not table:
-            continue
-
-        for row in table.find_all("tr")[1:]:  # Saltar encabezado
-            cols = row.find_all("td")
-            if len(cols) >= 3:
-                pdf_tag = cols[1].find("a")
-                if pdf_tag and pdf_tag["href"].endswith(".pdf"):
-                    pdf_url = urljoin(BASE_URL, pdf_tag["href"])
-                    nombre_archivo = os.path.basename(pdf_tag["href"])
-                    data.append({
-                        "empresa": empresa,
-                        "archivo": nombre_archivo,
-                        "url": pdf_url
-                    })
-    return data
-
-def descargar_pdf(item):
-    nombre = item["archivo"]
-    destino = os.path.join(PDF_DIR, nombre)
-    if os.path.exists(destino):
-        print(f"Ya existe: {nombre}")
-        return
-    try:
-        r = requests.get(item["url"], timeout=30)
-        r.raise_for_status()
-        with open(destino, "wb") as f:
-            f.write(r.content)
-        print(f"Descargado: {nombre}")
-    except requests.RequestException as e:
-        print(f"❌ Error descargando {nombre}: {e}")
+            try:
+                print(f"⬇️  Descargando: {pdf_filename}")
+                response = session.get(pdf_url, timeout=60, headers=HEADERS)
+                with open(pdf_path, "wb") as f:
+                    f.write(response.content)
+                count += 1
+            except requests.RequestException as e:
+                print(f"❌ Error descargando {pdf_url}: {e}")
+    print(f"✅ PDFs descargados nuevos: {count}")
 
 def main():
     print("🔎 Verificando cambios en la página de tarifas...")
 
-    # Obtener cabecera Last-Modified
-    current_last_modified = get_last_modified()
-    saved_last_modified = load_file(LAST_MODIFIED_FILE)
+    get_last_modified_header()
 
-    # Obtener HTML completo con timeout alto
     try:
-        response = requests.get(TARGET_URL, timeout=30)
-        response.raise_for_status()
+        response = session.get(TARGET_URL, timeout=30, headers=HEADERS)
+        html_content = response.text
     except requests.RequestException as e:
         print(f"⚠️ Error al conectar con la página de la SISS: {e}")
-        sys.exit(0)  # Salir sin error para no romper el workflow
+        return
 
-    html = response.text
-    current_hash = hash_div_content(html)
-    saved_hash = load_file(HASH_FILE)
+    current_hash = calculate_page_hash(html_content)
+    last_hash = load_last_hash()
 
-    # Comprobar si hay cambios
-    if current_last_modified == saved_last_modified and current_hash == saved_hash:
-        print("✅ Sin cambios detectados.")
-        sys.exit(0)
+    if current_hash == last_hash:
+        print("🟢 La página no ha cambiado desde la última ejecución. Nada que hacer.")
+        return
 
-    print("⚠️ Cambios detectados. Procesando PDFs...")
-    pdfs = get_pdf_links(html)
-
-    for item in pdfs:
-        descargar_pdf(item)
-
-    save_file(OUTPUT_JSON, json.dumps(pdfs, indent=2, ensure_ascii=False))
-    if current_last_modified:
-        save_file(LAST_MODIFIED_FILE, current_last_modified)
-    if current_hash:
-        save_file(HASH_FILE, current_hash)
-
-    print(f"Proceso finalizado. {len(pdfs)} PDFs registrados en {OUTPUT_JSON}")
+    print("🟡 La página ha cambiado. Procesando...")
+    soup = BeautifulSoup(html_content, "html.parser")
+    download_pdfs(soup)
+    save_current_hash(current_hash)
+    print("✅ Proceso finalizado. Hash actualizado.")
 
 if __name__ == "__main__":
     main()
