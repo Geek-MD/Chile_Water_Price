@@ -1,10 +1,10 @@
 import os
+import sys
 import requests
 import hashlib
 import json
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-from datetime import datetime
 
 # Configuración
 BASE_URL = "https://www.siss.gob.cl"
@@ -21,11 +21,12 @@ os.makedirs(PDF_DIR, exist_ok=True)
 os.makedirs(DATA_DIR, exist_ok=True)
 
 def get_last_modified():
+    """Obtiene la cabecera Last-Modified del recurso si existe"""
     try:
-        response = requests.head(TARGET_URL, timeout=10)
+        response = requests.head(TARGET_URL, timeout=30, allow_redirects=True)
         return response.headers.get("Last-Modified")
-    except Exception as e:
-        print("Error obteniendo encabezado Last-Modified:", e)
+    except requests.RequestException as e:
+        print(f"⚠️ Error obteniendo encabezado Last-Modified: {e}")
         return None
 
 def load_file(filepath):
@@ -75,29 +76,41 @@ def descargar_pdf(item):
         print(f"Ya existe: {nombre}")
         return
     try:
-        r = requests.get(item["url"], timeout=10)
+        r = requests.get(item["url"], timeout=30)
+        r.raise_for_status()
         with open(destino, "wb") as f:
             f.write(r.content)
         print(f"Descargado: {nombre}")
-    except Exception as e:
-        print(f"Error descargando {nombre}: {e}")
+    except requests.RequestException as e:
+        print(f"❌ Error descargando {nombre}: {e}")
 
 def main():
-    print("Verificando cambios en la página de tarifas...")
+    print("🔎 Verificando cambios en la página de tarifas...")
+
+    # Obtener cabecera Last-Modified
     current_last_modified = get_last_modified()
     saved_last_modified = load_file(LAST_MODIFIED_FILE)
 
-    response = requests.get(TARGET_URL, timeout=10)
+    # Obtener HTML completo con timeout alto
+    try:
+        response = requests.get(TARGET_URL, timeout=30)
+        response.raise_for_status()
+    except requests.RequestException as e:
+        print(f"⚠️ Error al conectar con la página de la SISS: {e}")
+        sys.exit(0)  # Salir sin error para no romper el workflow
+
     html = response.text
     current_hash = hash_div_content(html)
     saved_hash = load_file(HASH_FILE)
 
+    # Comprobar si hay cambios
     if current_last_modified == saved_last_modified and current_hash == saved_hash:
-        print("Sin cambios detectados.")
-        return
+        print("✅ Sin cambios detectados.")
+        sys.exit(0)
 
-    print("Cambios detectados. Procesando PDF...")
+    print("⚠️ Cambios detectados. Procesando PDFs...")
     pdfs = get_pdf_links(html)
+
     for item in pdfs:
         descargar_pdf(item)
 
