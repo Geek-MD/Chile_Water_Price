@@ -1,4 +1,12 @@
-PyMuPDF==1.23.16
-pandas==2.2.2
+# Web scraping
+requests==2.31.0
+beautifulsoup4==4.12.3
+lxml==5.2.1
+
+# PDF parsing
 pdfplumber==0.11.0
-regex==2023.12.25
+PyMuPDF==1.23.22
+
+# Utilidades
+pandas==2.2.2
+python-dateutil==2.9.0.post0
