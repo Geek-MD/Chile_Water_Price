@@ -1,0 +1,9 @@
+services:
+  siss_scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ./data:/data
+      - ./scripts:/app/scripts
+    working_dir: /app/scripts
