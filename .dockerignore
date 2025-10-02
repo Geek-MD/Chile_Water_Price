@@ -1,0 +1,17 @@
+# Ignore Python cache and temporary files
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.log
+
+# Ignore OS-specific files
+.DS_Store
+
+# Ignore virtual environments
+venv/
+.env/
+
+# Ignore Git-related files
+.git
+.gitignore
