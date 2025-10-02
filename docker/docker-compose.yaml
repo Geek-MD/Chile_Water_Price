@@ -1,7 +1,0 @@
-services:
-  siss_scraper:
-    build: .
-    container_name: siss_scraper
-    volumes:
-      - ./data:/app/data
-    restart: unless-stopped
