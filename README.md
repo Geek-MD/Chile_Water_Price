@@ -25,7 +25,7 @@ The pipeline performs the following steps:
 
 ## 🏗️ Folder Structure
 
-```text
+```
 📁 /data
     └── json/                 # Output structured JSON files
     └── pdf/                  # Downloaded PDFs
@@ -37,7 +37,8 @@ The pipeline performs the following steps:
     ├── main.py              # Orchestrates the pipeline
 📄 requirements.txt
 📄 Dockerfile
-📄 docker-compose.yml```
+📄 docker-compose.yml
+```
 
 ## 🐳 Docker Setup
 
